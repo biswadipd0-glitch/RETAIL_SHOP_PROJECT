@@ -30,7 +30,7 @@ def get_connection():
 # ============================================================
 
 st.set_page_config(
-    page_title="QR Billing System",
+    page_title="Retail Shop Billing System",
     page_icon="🧾",
     layout="wide"
 )
