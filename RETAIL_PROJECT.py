@@ -39,7 +39,15 @@ st.set_page_config(
 # ============================================================
 # SESSION STATE
 # ============================================================
+if "start_scanning" not in st.session_state:
+    st.session_state.start_scanning = False
 
+if "qr_found" not in st.session_state:
+    st.session_state.qr_found = False
+
+if "qr_value" not in st.session_state:
+    st.session_state.qr_value = None
+    
 if "customer" not in st.session_state:
     st.session_state.customer = None
 
@@ -359,7 +367,7 @@ def data_entry_BILL_DETAILS_TB(
 # APPLICATION HEADER
 # ============================================================
 
-st.title("🧾 QR CODE BILLING SYSTEM")
+st.title("🧾 RETAIL SHOP BILLING SYSTEM")
 
 st.divider()
 
@@ -563,94 +571,110 @@ if st.session_state.customer:
         )
 
 
-        # ====================================================
-        # SCAN PRODUCT QR
-        # ====================================================
 
-        if st.button(
-            "📷 SCAN PRODUCT QR",
-            type="primary"
-        ):
+# ========================================================
+# SCAN PRODUCT QR
+# ========================================================
 
-            try:
+if st.button(
+    "📷 SCAN PRODUCT QR",
+    type="primary"
+):
 
-                # --------------------------------------------
-                # THIS OPENS YOUR SEPARATE CAMERA WINDOW
-                # --------------------------------------------
+    # Start scanner
+    st.session_state.start_scanning = True
 
-                p_id = QR_CODE_SCANNER.qr_code_scanner()
+    # Reset previous QR
+    st.session_state.qr_found = False
+    st.session_state.qr_value = None
 
-
-                # --------------------------------------------
-                # QR CANCELLED
-                # --------------------------------------------
-
-                if p_id is None:
-
-                    st.warning(
-                        "QR scanning cancelled."
-                    )
+    st.rerun()
 
 
-                else:
+# ========================================================
+# SHOW CAMERA SCANNER
+# ========================================================
 
-                    st.success(
-                        f"QR Code Scanned: {p_id}"
-                    )
+if st.session_state.get(
+    "start_scanning",
+    False
+):
 
-
-                    # ----------------------------------------
-                    # CONVERT QR VALUE TO INTEGER
-                    # ----------------------------------------
-
-                    try:
-
-                        p_id = int(p_id)
-
-                    except ValueError:
-
-                        st.error(
-                            "Invalid Product ID in QR code."
-                        )
-
-                        st.stop()
+    p_id = QR_CODE_SCANNER.qr_code_scanner()
 
 
-                    # ----------------------------------------
-                    # GET PRODUCT FROM MYSQL
-                    # ----------------------------------------
+    # ----------------------------------------------------
+    # QR HAS BEEN FOUND
+    # ----------------------------------------------------
 
-                    p_details = (
-                        data_retrieve_from_PRODUCT_DETAILS(
-                            p_id
-                        )
-                    )
+    if p_id:
 
-
-                    if p_details is None:
-
-                        st.error(
-                            f"Product ID {p_id} "
-                            "does not exist."
-                        )
+        st.success(
+            f"✅ Product QR Code: {p_id}"
+        )
 
 
-                    else:
-
-                        st.session_state.scanned_product = {
-                            "p_id": p_details[0],
-                            "p_name": p_details[1],
-                            "price": float(p_details[2])
-                        }
-
-                        st.rerun()
+        # Stop scanner
+        st.session_state.start_scanning = False
 
 
-            except Exception as e:
+        # ------------------------------------------------
+        # CONVERT PRODUCT ID
+        # ------------------------------------------------
 
-                st.error(
-                    f"Camera error: {e}"
-                )
+        try:
+
+            p_id = int(p_id)
+
+        except ValueError:
+
+            st.error(
+                "The QR code does not contain "
+                "a valid Product ID."
+            )
+
+            st.stop()
+
+
+        # ------------------------------------------------
+        # GET PRODUCT FROM MYSQL
+        # ------------------------------------------------
+
+        p_details = (
+            data_retrieve_from_PRODUCT_DETAILS(
+                p_id
+            )
+        )
+
+
+        if p_details is None:
+
+            st.error(
+                f"Product ID {p_id} "
+                "does not exist in PRODUCT_DETAILS."
+            )
+
+
+        else:
+
+            st.session_state.scanned_product = {
+
+                "p_id": p_details[0],
+
+                "p_name": p_details[1],
+
+                "price": float(p_details[2])
+            }
+
+
+            # Clear QR scanner state
+
+            st.session_state.qr_found = False
+
+            st.session_state.qr_value = None
+
+            st.rerun()
+
 
 
         # ====================================================
