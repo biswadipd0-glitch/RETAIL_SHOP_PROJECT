@@ -1,4 +1,5 @@
 streamlit
 mysql-connector-python
 opencv-python-headless
-
+numpy
+streamlit-camera-input-live
