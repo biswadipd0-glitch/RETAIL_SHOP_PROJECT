@@ -1,4 +1,3 @@
-python
 import streamlit as st
 import mysql.connector
 import QR_CODE_SCANNER
