@@ -1,0 +1,6 @@
+streamlit
+mysql-connector-python
+pyzbar
+streamlit-camera-input-live
+Pillow
+numpy
