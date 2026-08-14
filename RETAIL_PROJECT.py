@@ -8,21 +8,21 @@ import QR_CODE_SCANNER
 # MYSQL CLOUD DATABASE CONNECTION
 # ============================================================
 
-MYSQL_HOST = "YOUR_CLOUD_MYSQL_HOST"
-MYSQL_PORT = 3306
-MYSQL_USER = "YOUR_CLOUD_MYSQL_USER"
-MYSQL_PASSWORD = "YOUR_CLOUD_MYSQL_PASSWORD"
-MYSQL_DATABASE = "BD"
-
-
 def get_connection():
 
     return mysql.connector.connect(
-        host=MYSQL_HOST,
-        port=MYSQL_PORT,
-        user=MYSQL_USER,
-        password=MYSQL_PASSWORD,
-        database=MYSQL_DATABASE
+
+        host=st.secrets["MYSQL_HOST"],
+
+        port=int(
+            st.secrets["MYSQL_PORT"]
+        ),
+
+        user=st.secrets["MYSQL_USER"],
+
+        password=st.secrets["MYSQL_PASSWORD"],
+
+        database=st.secrets["MYSQL_DATABASE"]
     )
 
 
