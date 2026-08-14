@@ -1,94 +1,67 @@
+import streamlit as st
 import cv2
+import numpy as np
+from camera_input_live import camera_input_live
 
 
 def qr_code_scanner():
-    """
-    Opens a separate OpenCV camera window.
-    Scans one QR code and returns its decoded value.
-    """
 
-    camera = cv2.VideoCapture(0)
+    st.write("### 📷 Scan Product QR Code")
+    st.info("Allow camera permission and show the QR code to the camera.")
 
-    if not camera.isOpened():
-        raise Exception("Cannot open camera.")
+    # Browser-based live camera
+    image = camera_input_live()
 
-    detector = cv2.QRCodeDetector()
+    if image is None:
+        return None
 
-    scanned_value = None
+    try:
 
-    print("Camera started. Show the QR code to the camera.")
-    print("Press Q to cancel scanning.")
+        # Get image bytes
+        image_bytes = image.getvalue()
 
-    while True:
-        ret, frame = camera.read()
-
-        if not ret:
-            continue
-
-        # Try to detect and decode QR
-        data, points, _ = detector.detectAndDecode(frame)
-
-        # Draw rectangle around detected QR
-        if points is not None:
-            points = points.astype(int)
-
-            for i in range(len(points[0])):
-                pt1 = tuple(points[0][i])
-                pt2 = tuple(points[0][(i + 1) % len(points[0])])
-
-                cv2.line(
-                    frame,
-                    pt1,
-                    pt2,
-                    (0, 255, 0),
-                    3
-                )
-
-        # Display instruction
-        cv2.putText(
-            frame,
-            "Show QR Code | Press Q to Cancel",
-            (20, 40),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.8,
-            (255, 255, 255),
-            2
+        # Convert bytes to NumPy array
+        image_array = np.frombuffer(
+            image_bytes,
+            np.uint8
         )
 
-        # If QR detected
+        # Convert to OpenCV image
+        frame = cv2.imdecode(
+            image_array,
+            cv2.IMREAD_COLOR
+        )
+
+        if frame is None:
+            return None
+
+        # QR detector
+        detector = cv2.QRCodeDetector()
+
+        # Detect and decode QR
+        data, points, _ = detector.detectAndDecode(frame)
+
         if data:
+
             scanned_value = data.strip()
 
-            cv2.putText(
-                frame,
-                f"Scanned: {scanned_value}",
-                (20, 80),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.8,
-                (0, 255, 0),
-                2
+            st.success(
+                f"✅ QR Code Detected: {scanned_value}"
             )
 
-            cv2.imshow("QR Scanner", frame)
+            return scanned_value
 
-            # Give user a moment to see successful scan
-            cv2.waitKey(800)
+        st.warning(
+            "🔍 QR code not detected. "
+            "Please keep the QR code inside the camera view."
+        )
 
-            break
+        return None
 
-        cv2.imshow("QR Scanner", frame)
+    except Exception as e:
 
-        # Press Q to cancel
-        key = cv2.waitKey(1) & 0xFF
+        st.error(
+            f"QR scanning error: {e}"
+        )
 
-        if key == ord("q"):
-            break
-
-    camera.release()
-    cv2.destroyAllWindows()
-
-    # Make absolutely sure window closes
-    for _ in range(5):
-        cv2.waitKey(1)
-
-    return scanned_value
+        return None
