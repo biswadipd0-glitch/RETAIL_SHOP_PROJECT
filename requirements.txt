@@ -1,7 +1,0 @@
-streamlit
-mysql-connector-python
-streamlit-webrtc
-streamlit-autorefresh
-pyzbar
-av
-numpy
