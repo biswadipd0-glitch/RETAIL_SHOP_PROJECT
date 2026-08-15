@@ -6,8 +6,7 @@ from PIL import Image
 
 from camera_input_live import camera_input_live
 
-from qr_scanner import qr_code_scanner
-
+from qr_code_scanner import qr_code_scanner
 
 # ============================================================
 # PAGE CONFIGURATION
