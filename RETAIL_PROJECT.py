@@ -1,32 +1,16 @@
 import streamlit as st
 import mysql.connector
-import QR_CODE_SCANNER
+import numpy as np
+
+from PIL import Image
+
+from camera_input_live import camera_input_live
+
+from qr_scanner import qr_code_scanner
 
 
 # ============================================================
-# MYSQL CLOUD DATABASE CONNECTION
-# ============================================================
-
-def get_connection():
-
-    return mysql.connector.connect(
-
-        host=st.secrets["MYSQL_HOST"],
-
-        port=int(
-            st.secrets["MYSQL_PORT"]
-        ),
-
-        user=st.secrets["MYSQL_USER"],
-
-        password=st.secrets["MYSQL_PASSWORD"],
-
-        database=st.secrets["MYSQL_DATABASE"]
-    )
-
-
-# ============================================================
-# STREAMLIT CONFIGURATION
+# PAGE CONFIGURATION
 # ============================================================
 
 st.set_page_config(
@@ -35,162 +19,26 @@ st.set_page_config(
     layout="wide"
 )
 
-
-# ============================================================
-# SESSION STATE
-# ============================================================
-if "start_scanning" not in st.session_state:
-    st.session_state.start_scanning = False
-
-if "qr_found" not in st.session_state:
-    st.session_state.qr_found = False
-
-if "qr_value" not in st.session_state:
-    st.session_state.qr_value = None
-    
-if "customer" not in st.session_state:
-    st.session_state.customer = None
-
-if "billing_started" not in st.session_state:
-    st.session_state.billing_started = False
-
-if "bill_items" not in st.session_state:
-    st.session_state.bill_items = []
-
-if "total_bill_amount" not in st.session_state:
-    st.session_state.total_bill_amount = 0.0
-
-if "billing_finished" not in st.session_state:
-    st.session_state.billing_finished = False
-
-if "show_registration" not in st.session_state:
-    st.session_state.show_registration = False
-
-if "scanned_product" not in st.session_state:
-    st.session_state.scanned_product = None
+st.title("🧾 Retail Shop Billing System")
 
 
 # ============================================================
-# CUSTOMER RETRIEVE
+# MYSQL CLOUD CONNECTION
 # ============================================================
 
-def data_retrieve(ph_no):
+def get_connection():
 
-    conn_obj = None
-    cur_obj = None
-
-    try:
-
-        conn_obj = get_connection()
-        cur_obj = conn_obj.cursor()
-
-        sql = """
-            SELECT *
-            FROM CUST_DETAILS
-            WHERE PH_NUMBER = %s
-        """
-
-        cur_obj.execute(sql, (ph_no,))
-
-        result = cur_obj.fetchone()
-
-        return result
-
-    except mysql.connector.Error as e:
-
-        st.error(f"Error retrieving customer data: {e}")
-        return None
-
-    finally:
-
-        if cur_obj:
-            cur_obj.close()
-
-        if conn_obj:
-            conn_obj.close()
+    return mysql.connector.connect(
+        host=st.secrets["MYSQL_HOST"],
+        port=int(st.secrets["MYSQL_PORT"]),
+        user=st.secrets["MYSQL_USER"],
+        password=st.secrets["MYSQL_PASSWORD"],
+        database=st.secrets["MYSQL_DATABASE"]
+    )
 
 
 # ============================================================
-# PRODUCT RETRIEVE
-# ============================================================
-
-def data_retrieve_from_PRODUCT_DETAILS(p_id):
-
-    conn_obj = None
-    cur_obj = None
-
-    try:
-
-        conn_obj = get_connection()
-        cur_obj = conn_obj.cursor()
-
-        sql = """
-            SELECT *
-            FROM PRODUCT_DETAILS
-            WHERE P_ID = %s
-        """
-
-        cur_obj.execute(sql, (p_id,))
-
-        result = cur_obj.fetchone()
-
-        return result
-
-    except mysql.connector.Error as e:
-
-        st.error(f"Error retrieving product data: {e}")
-        return None
-
-    finally:
-
-        if cur_obj:
-            cur_obj.close()
-
-        if conn_obj:
-            conn_obj.close()
-
-
-# ============================================================
-# GET LAST BILL ID
-# ============================================================
-
-def data_retrieve_from_BILL_SUMMARY_TABLE():
-
-    conn_obj = None
-    cur_obj = None
-
-    try:
-
-        conn_obj = get_connection()
-        cur_obj = conn_obj.cursor()
-
-        sql = """
-            SELECT COALESCE(MAX(BILL_ID), 0)
-            FROM BILL_SUMMARY_TABLE
-        """
-
-        cur_obj.execute(sql)
-
-        result = cur_obj.fetchone()
-
-        return result
-
-    except mysql.connector.Error as e:
-
-        st.error(f"Error retrieving bill ID: {e}")
-        return (0,)
-
-    finally:
-
-        if cur_obj:
-            cur_obj.close()
-
-        if conn_obj:
-            conn_obj.close()
-
-
-# ============================================================
-# INSERT CUSTOMER
+# INSERT CUSTOMER DETAILS
 # ============================================================
 
 def data_entry_CUST_DETAILS(
@@ -199,17 +47,21 @@ def data_entry_CUST_DETAILS(
     ph_no_cust
 ):
 
-    conn_obj = None
-    cur_obj = None
+    conn = None
+    cursor = None
 
     try:
 
-        conn_obj = get_connection()
-        cur_obj = conn_obj.cursor()
+        conn = get_connection()
+        cursor = conn.cursor()
 
         sql = """
             INSERT INTO CUST_DETAILS
-            (FULL_NAME, ADDRESS, PH_NUMBER)
+            (
+                FULL_NAME,
+                ADDRESS,
+                PH_NUMBER
+            )
             VALUES (%s, %s, %s)
         """
 
@@ -219,30 +71,35 @@ def data_entry_CUST_DETAILS(
             ph_no_cust
         )
 
-        cur_obj.execute(sql, data)
+        cursor.execute(
+            sql,
+            data
+        )
 
-        conn_obj.commit()
+        conn.commit()
 
-        return True
+        return (
+            True,
+            "NEW CUSTOMER REGISTRATION SUCCESSFUL."
+        )
 
     except mysql.connector.Error as e:
 
-        if conn_obj:
-            conn_obj.rollback()
+        if conn:
+            conn.rollback()
 
-        st.error(
+        return (
+            False,
             f"Error inserting customer: {e}"
         )
 
-        return False
-
     finally:
 
-        if cur_obj:
-            cur_obj.close()
+        if cursor:
+            cursor.close()
 
-        if conn_obj:
-            conn_obj.close()
+        if conn:
+            conn.close()
 
 
 # ============================================================
@@ -250,57 +107,67 @@ def data_entry_CUST_DETAILS(
 # ============================================================
 
 def data_entry_BILL_SUMMARY_TABLE(
-    bill_id,
     c_id,
     c_name,
     total_bill_value
 ):
 
-    conn_obj = None
-    cur_obj = None
+    conn = None
+    cursor = None
 
     try:
 
-        conn_obj = get_connection()
-        cur_obj = conn_obj.cursor()
+        conn = get_connection()
+        cursor = conn.cursor()
 
         sql = """
             INSERT INTO BILL_SUMMARY_TABLE
-            (BILL_ID, C_ID, C_NAME, TOTAL_BILL_VALUE)
-            VALUES (%s, %s, %s, %s)
+            (
+                C_ID,
+                C_NAME,
+                TOTAL_BILL_VALUE
+            )
+            VALUES (%s, %s, %s)
         """
 
         data = (
-            bill_id,
             c_id,
             c_name,
             total_bill_value
         )
 
-        cur_obj.execute(sql, data)
+        cursor.execute(
+            sql,
+            data
+        )
 
-        conn_obj.commit()
+        conn.commit()
 
-        return True
+        # BILL_ID should be AUTO_INCREMENT
+        bill_id = cursor.lastrowid
+
+        return (
+            True,
+            bill_id
+        )
 
     except mysql.connector.Error as e:
 
-        if conn_obj:
-            conn_obj.rollback()
+        if conn:
+            conn.rollback()
 
-        st.error(
+        return (
+            False,
             f"Error inserting bill summary: {e}"
         )
 
-        return False
-
     finally:
 
-        if cur_obj:
-            cur_obj.close()
+        if cursor:
+            cursor.close()
 
-        if conn_obj:
-            conn_obj.close()
+        if conn:
+            conn.close()
 
 
 # ============================================================
@@ -315,17 +182,23 @@ def data_entry_BILL_DETAILS_TB(
     quantity
 ):
 
-    conn_obj = None
-    cur_obj = None
+    conn = None
+    cursor = None
 
     try:
 
-        conn_obj = get_connection()
-        cur_obj = conn_obj.cursor()
+        conn = get_connection()
+        cursor = conn.cursor()
 
         sql = """
             INSERT INTO BILL_DETAILS_TB
-            (BILL_ID, C_ID, P_ID, P_NAME, QUANTITY)
+            (
+                BILL_ID,
+                C_ID,
+                P_ID,
+                P_NAME,
+                QUANTITY
+            )
             VALUES (%s, %s, %s, %s, %s)
         """
 
@@ -337,60 +210,259 @@ def data_entry_BILL_DETAILS_TB(
             quantity
         )
 
-        cur_obj.execute(sql, data)
+        cursor.execute(
+            sql,
+            data
+        )
 
-        conn_obj.commit()
+        conn.commit()
 
-        return True
+        return (
+            True,
+            "Bill details inserted successfully."
+        )
 
     except mysql.connector.Error as e:
 
-        if conn_obj:
-            conn_obj.rollback()
+        if conn:
+            conn.rollback()
 
-        st.error(
+        return (
+            False,
             f"Error inserting bill details: {e}"
         )
+
+    finally:
+
+        if cursor:
+            cursor.close()
+
+        if conn:
+            conn.close()
+
+
+# ============================================================
+# UPDATE BILL TOTAL
+# ============================================================
+
+def update_bill_total(
+    bill_id,
+    total_amount
+):
+
+    conn = None
+    cursor = None
+
+    try:
+
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        sql = """
+            UPDATE BILL_SUMMARY_TABLE
+            SET TOTAL_BILL_VALUE = %s
+            WHERE BILL_ID = %s
+        """
+
+        cursor.execute(
+            sql,
+            (
+                total_amount,
+                bill_id
+            )
+        )
+
+        conn.commit()
+
+        return True
+
+    except mysql.connector.Error:
+
+        if conn:
+            conn.rollback()
 
         return False
 
     finally:
 
-        if cur_obj:
-            cur_obj.close()
+        if cursor:
+            cursor.close()
 
-        if conn_obj:
-            conn_obj.close()
+        if conn:
+            conn.close()
 
 
 # ============================================================
-# APPLICATION HEADER
+# RETRIEVE CUSTOMER
 # ============================================================
 
-st.title("🧾 RETAIL SHOP BILLING SYSTEM")
+def data_retrieve(ph_no):
 
-st.divider()
+    conn = None
+    cursor = None
+
+    try:
+
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        sql = """
+            SELECT *
+            FROM CUST_DETAILS
+            WHERE PH_NUMBER = %s
+        """
+
+        cursor.execute(
+            sql,
+            (ph_no,)
+        )
+
+        result = cursor.fetchone()
+
+        return result
+
+    except mysql.connector.Error as e:
+
+        st.error(
+            f"Error retrieving customer: {e}"
+        )
+
+        return None
+
+    finally:
+
+        if cursor:
+            cursor.close()
+
+        if conn:
+            conn.close()
+
+
+# ============================================================
+# RETRIEVE PRODUCT
+# ============================================================
+
+def data_retrieve_from_PRODUCT_DETAILS(
+    p_id
+):
+
+    conn = None
+    cursor = None
+
+    try:
+
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        sql = """
+            SELECT *
+            FROM PRODUCT_DETAILS
+            WHERE P_ID = %s
+        """
+
+        cursor.execute(
+            sql,
+            (p_id,)
+        )
+
+        result = cursor.fetchone()
+
+        return result
+
+    except mysql.connector.Error as e:
+
+        st.error(
+            f"Error retrieving product: {e}"
+        )
+
+        return None
+
+    finally:
+
+        if cursor:
+            cursor.close()
+
+        if conn:
+            conn.close()
+
+
+# ============================================================
+# SESSION STATE
+# ============================================================
+
+if "customer" not in st.session_state:
+
+    st.session_state.customer = None
+
+
+if "phone_number" not in st.session_state:
+
+    st.session_state.phone_number = ""
+
+
+if "billing_started" not in st.session_state:
+
+    st.session_state.billing_started = False
+
+
+if "bill_id" not in st.session_state:
+
+    st.session_state.bill_id = None
+
+
+if "total_bill" not in st.session_state:
+
+    st.session_state.total_bill = 0.0
+
+
+if "bill_items" not in st.session_state:
+
+    st.session_state.bill_items = []
+
+
+if "product_details" not in st.session_state:
+
+    st.session_state.product_details = None
+
+
+if "last_detected_p_id" not in st.session_state:
+
+    st.session_state.last_detected_p_id = None
+
+
+if "camera_active" not in st.session_state:
+
+    st.session_state.camera_active = False
 
 
 # ============================================================
 # CUSTOMER SECTION
 # ============================================================
 
-st.subheader("👤 Customer Information")
+if not st.session_state.billing_started:
+
+    st.header("👤 Customer Details")
 
 
-if st.session_state.customer is None:
+    phone = st.text_input(
+        "Enter customer's phone number",
+        value=st.session_state.phone_number
+    ).strip()
 
-    phone_number = st.text_input(
-        "Enter customer's phone number"
-    )
+
+    st.session_state.phone_number = phone
+
+
+    # ========================================================
+    # SEARCH CUSTOMER
+    # ========================================================
 
     if st.button(
-        "Search Customer",
+        "🔍 Search Customer",
         type="primary"
     ):
 
-        if not phone_number.strip():
+        if phone == "":
 
             st.warning(
                 "Please enter customer's phone number."
@@ -398,552 +470,762 @@ if st.session_state.customer is None:
 
         else:
 
-            cust_details = data_retrieve(
-                phone_number.strip()
-            )
+            customer = data_retrieve(phone)
 
-            if cust_details:
 
-                st.session_state.customer = {
-                    "c_id": cust_details[0],
-                    "name": cust_details[1],
-                    "address": cust_details[2],
-                    "phone": cust_details[3]
-                }
+            if customer:
+
+                st.session_state.customer = customer
 
                 st.success(
-                    "Existing customer found."
+                    "EXISTING CUSTOMER FOUND."
                 )
+
+            else:
+
+                st.session_state.customer = "NEW"
+
+                st.info(
+                    "NEW CUSTOMER. "
+                    "PLEASE REGISTER CUSTOMER DETAILS."
+                )
+
+
+    # ========================================================
+    # EXISTING CUSTOMER
+    # ========================================================
+
+    if (
+        st.session_state.customer is not None
+        and
+        st.session_state.customer != "NEW"
+    ):
+
+        customer = st.session_state.customer
+
+
+        st.subheader(
+            "Existing Customer Details"
+        )
+
+
+        col1, col2, col3 = st.columns(3)
+
+
+        with col1:
+
+            st.write(
+                f"**Customer ID:** {customer[0]}"
+            )
+
+
+        with col2:
+
+            st.write(
+                f"**Customer Name:** {customer[1]}"
+            )
+
+
+        with col3:
+
+            st.write(
+                f"**Address:** {customer[2]}"
+            )
+
+
+        # ====================================================
+        # START BILLING
+        # ====================================================
+
+        if st.button(
+            "🛒 Start Billing",
+            type="primary"
+        ):
+
+            success, result = (
+                data_entry_BILL_SUMMARY_TABLE(
+                    customer[0],
+                    customer[1],
+                    0
+                )
+            )
+
+
+            if success:
+
+                st.session_state.billing_started = True
+
+                st.session_state.bill_id = result
+
+                st.session_state.total_bill = 0.0
+
+                st.session_state.bill_items = []
+
+                st.session_state.product_details = None
+
+                st.session_state.last_detected_p_id = None
+
+                st.session_state.camera_active = True
 
                 st.rerun()
 
             else:
 
-                st.warning(
-                    "NEW CUSTOMER. PLEASE REGISTER CUSTOMER DETAILS."
-                )
-
-                st.session_state.show_registration = True
+                st.error(result)
 
 
-# ============================================================
-# NEW CUSTOMER REGISTRATION
-# ============================================================
+    # ========================================================
+    # NEW CUSTOMER
+    # ========================================================
 
-if (
-    st.session_state.customer is None
-    and st.session_state.show_registration
-):
-
-    st.subheader("📝 New Customer Registration")
-
-    full_name = st.text_input(
-        "Enter Full Name"
-    )
-
-    address = st.text_area(
-        "Enter Address"
-    )
-
-    phone = st.session_state.get(
-        "phone_number",
-        ""
-    )
-
-    st.text_input(
-        "Phone Number",
-        value=phone,
-        disabled=True
-    )
-
-    if st.button(
-        "Register Customer",
-        type="primary"
+    elif (
+        st.session_state.customer == "NEW"
     ):
 
-        if (
-            not full_name.strip()
-            or not address.strip()
-        ):
-
-            st.warning(
-                "Please enter all customer details."
-            )
-
-        else:
-
-            success = data_entry_CUST_DETAILS(
-                full_name.strip().upper(),
-                address.strip().upper(),
-                phone.strip()
-            )
-
-            if success:
-
-                st.success(
-                    "NEW CUSTOMER REGISTRATION SUCCESSFUL."
-                )
-
-                cust_details = data_retrieve(
-                    phone.strip()
-                )
-
-                if cust_details:
-
-                    st.session_state.customer = {
-                        "c_id": cust_details[0],
-                        "name": cust_details[1],
-                        "address": cust_details[2],
-                        "phone": cust_details[3]
-                    }
-
-                    st.session_state.show_registration = False
-
-                    st.rerun()
+        st.subheader(
+            "🆕 New Customer Registration"
+        )
 
 
-# ============================================================
-# DISPLAY CUSTOMER
-# ============================================================
-
-if st.session_state.customer:
-
-    customer = st.session_state.customer
-
-    st.success("Customer details loaded.")
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-
-        st.write("**Customer ID**")
-        st.write(customer["c_id"])
-
-    with col2:
-
-        st.write("**Customer Name**")
-        st.write(customer["name"])
-
-    with col3:
-
-        st.write("**Phone Number**")
-        st.write(customer["phone"])
-
-    st.divider()
+        full_name = st.text_input(
+            "Full Name"
+        ).strip().upper()
 
 
-# ============================================================
-# BILLING
-# ============================================================
+        address = st.text_area(
+            "Address"
+        ).strip().upper()
 
-if st.session_state.customer:
-
-    st.subheader("🛒 Billing")
-
-
-    # ========================================================
-    # START BILLING
-    # ========================================================
-
-    if not st.session_state.billing_started:
 
         if st.button(
-            "🚀 START BILLING",
+            "📝 Register Customer",
             type="primary"
         ):
 
-            st.session_state.billing_started = True
-
-            st.session_state.billing_finished = False
-
-            st.rerun()
-
-
-    # ========================================================
-    # BILLING STARTED
-    # ========================================================
-
-    if st.session_state.billing_started:
-
-        st.info(
-            "Click the button below to open the camera "
-            "and scan the product QR code."
-        )
-
-
-
-# ========================================================
-# SCAN PRODUCT QR
-# ========================================================
-
-if st.button(
-    "📷 SCAN PRODUCT QR",
-    type="primary"
-):
-
-    # Start scanner
-    st.session_state.start_scanning = True
-
-    # Reset previous QR
-    st.session_state.qr_found = False
-    st.session_state.qr_value = None
-
-    st.rerun()
-
-
-# ========================================================
-# SHOW CAMERA SCANNER
-# ========================================================
-
-if st.session_state.get(
-    "start_scanning",
-    False
-):
-
-    p_id = QR_CODE_SCANNER.qr_code_scanner()
-
-
-    # ----------------------------------------------------
-    # QR HAS BEEN FOUND
-    # ----------------------------------------------------
-
-    if p_id:
-
-        st.success(
-            f"✅ Product QR Code: {p_id}"
-        )
-
-
-        # Stop scanner
-        st.session_state.start_scanning = False
-
-
-        # ------------------------------------------------
-        # CONVERT PRODUCT ID
-        # ------------------------------------------------
-
-        try:
-
-            p_id = int(p_id)
-
-        except ValueError:
-
-            st.error(
-                "The QR code does not contain "
-                "a valid Product ID."
-            )
-
-            st.stop()
-
-
-        # ------------------------------------------------
-        # GET PRODUCT FROM MYSQL
-        # ------------------------------------------------
-
-        p_details = (
-            data_retrieve_from_PRODUCT_DETAILS(
-                p_id
-            )
-        )
-
-
-        if p_details is None:
-
-            st.error(
-                f"Product ID {p_id} "
-                "does not exist in PRODUCT_DETAILS."
-            )
-
-
-        else:
-
-            st.session_state.scanned_product = {
-
-                "p_id": p_details[0],
-
-                "p_name": p_details[1],
-
-                "price": float(p_details[2])
-            }
-
-
-            # Clear QR scanner state
-
-            st.session_state.qr_found = False
-
-            st.session_state.qr_value = None
-
-            st.rerun()
-
-
-
-        # ====================================================
-        # DISPLAY SCANNED PRODUCT
-        # ====================================================
-
-        if st.session_state.scanned_product:
-
-            product = st.session_state.scanned_product
-
-            st.divider()
-
-            st.subheader("📦 Scanned Product")
-
-            col1, col2, col3 = st.columns(3)
-
-            with col1:
-
-                st.write("**Product ID**")
-                st.write(product["p_id"])
-
-            with col2:
-
-                st.write("**Product Name**")
-                st.write(product["p_name"])
-
-            with col3:
-
-                st.write("**Price**")
-                st.write(
-                    f"₹ {product['price']:.2f}"
-                )
-
-
-            # =================================================
-            # QUANTITY
-            # =================================================
-
-            quantity = st.number_input(
-                "Enter Quantity",
-                min_value=1,
-                value=1,
-                step=1
-            )
-
-
-            # =================================================
-            # ADD PRODUCT
-            # =================================================
-
-            if st.button(
-                "➕ ADD PRODUCT TO BILL",
-                type="primary"
+            if (
+                full_name == ""
+                or
+                address == ""
             ):
 
-                last_bill = (
-                    data_retrieve_from_BILL_SUMMARY_TABLE()
+                st.warning(
+                    "Please enter full name "
+                    "and address."
                 )
 
-                last_bill_id = int(
-                    last_bill[0]
-                )
+            else:
 
-                new_bill_id = last_bill_id + 1
-
-                amount = (
-                    product["price"]
-                    * quantity
-                )
-
-
-                success = data_entry_BILL_DETAILS_TB(
-                    new_bill_id,
-                    st.session_state.customer["c_id"],
-                    product["p_id"],
-                    product["p_name"],
-                    quantity
-                )
-
-
-                if success:
-
-                    st.session_state.bill_items.append({
-
-                        "bill_id": new_bill_id,
-
-                        "p_id": product["p_id"],
-
-                        "p_name": product["p_name"],
-
-                        "price": product["price"],
-
-                        "quantity": quantity,
-
-                        "amount": amount
-                    })
-
-
-                    st.session_state.total_bill_amount += amount
-
-
-                    # Clear scanned product
-
-                    st.session_state.scanned_product = None
-
-
-                    st.success(
-                        f"{product['p_name']} "
-                        "added successfully."
-                    )
-
-                    st.rerun()
-
-
-        # ====================================================
-        # CURRENT BILL
-        # ====================================================
-
-        if st.session_state.bill_items:
-
-            st.divider()
-
-            st.subheader("🧾 CURRENT BILL")
-
-
-            for index, item in enumerate(
-                st.session_state.bill_items,
-                start=1
-            ):
-
-                col1, col2, col3, col4, col5 = st.columns(5)
-
-
-                with col1:
-
-                    st.write(
-                        f"**{index}**"
-                    )
-
-
-                with col2:
-
-                    st.write(
-                        item["p_name"]
-                    )
-
-
-                with col3:
-
-                    st.write(
-                        f"₹ {item['price']:.2f}"
-                    )
-
-
-                with col4:
-
-                    st.write(
-                        f"Qty: {item['quantity']}"
-                    )
-
-
-                with col5:
-
-                    st.write(
-                        f"₹ {item['amount']:.2f}"
-                    )
-
-
-            st.divider()
-
-
-            # =================================================
-            # TOTAL
-            # =================================================
-
-            st.subheader(
-                f"💰 TOTAL BILL: "
-                f"₹ {st.session_state.total_bill_amount:.2f}"
-            )
-
-
-            # =================================================
-            # FINISH BILLING
-            # =================================================
-
-            if st.button(
-                "✅ FINISH BILLING",
-                type="primary"
-            ):
-
-                last_bill = (
-                    data_retrieve_from_BILL_SUMMARY_TABLE()
-                )
-
-                bill_id = (
-                    int(last_bill[0]) + 1
-                )
-
-
-                customer = (
-                    st.session_state.customer
-                )
-
-
-                success = (
-                    data_entry_BILL_SUMMARY_TABLE(
-
-                        bill_id,
-
-                        customer["c_id"],
-
-                        customer["name"],
-
-                        st.session_state.total_bill_amount
+                success, message = (
+                    data_entry_CUST_DETAILS(
+                        full_name,
+                        address,
+                        phone
                     )
                 )
 
 
                 if success:
 
-                    st.session_state.billing_finished = True
+                    st.success(message)
 
-                    st.session_state.billing_started = False
 
-                    st.success(
-                        "🎉 BILL COMPLETED SUCCESSFULLY!"
+                    customer = data_retrieve(
+                        phone
                     )
 
-                    st.rerun()
+
+                    if customer:
+
+                        st.session_state.customer = (
+                            customer
+                        )
+
+                        st.rerun()
+
+                else:
+
+                    st.error(message)
 
 
 # ============================================================
-# BILL COMPLETED
+# BILLING SECTION
 # ============================================================
 
-if st.session_state.billing_finished:
+if st.session_state.billing_started:
+
+    customer = st.session_state.customer
+
 
     st.divider()
 
-    st.success(
-        "🎉 BILLING COMPLETED"
-    )
+    st.header("🛒 Billing")
+
+
+    # ========================================================
+    # BILL INFORMATION
+    # ========================================================
+
+    col1, col2, col3 = st.columns(3)
+
+
+    with col1:
+
+        st.metric(
+            "Customer",
+            customer[1]
+        )
+
+
+    with col2:
+
+        st.metric(
+            "Bill ID",
+            st.session_state.bill_id
+        )
+
+
+    with col3:
+
+        st.metric(
+            "Total Amount",
+            f"₹ "
+            f"{st.session_state.total_bill:.2f}"
+        )
+
+
+    # ========================================================
+    # CAMERA SECTION
+    # ========================================================
+
+    st.divider()
 
     st.subheader(
-        f"Final Amount: "
-        f"₹ {st.session_state.total_bill_amount:.2f}"
+        "📷 QR Code Scanner"
+    )
+
+
+    st.info(
+        """
+Show the product QR code clearly in front of
+the camera.
+
+Example QR content:
+
+101-ABC123
+
+The scanner will extract:
+
+101
+
+and use 101 as the Product ID.
+"""
     )
 
 
     # ========================================================
-    # NEW BILL
+    # LIVE CAMERA
     # ========================================================
 
+    camera_image = camera_input_live(
+        key="live_qr_camera"
+    )
+
+
+    # ========================================================
+    # PROCESS CAMERA IMAGE
+    # ========================================================
+
+    if camera_image is not None:
+
+        try:
+
+            # Read image from camera
+
+            image = Image.open(
+                camera_image
+            ).convert("RGB")
+
+
+            # Convert PIL image to NumPy
+            # array for pyzbar
+
+            frame = np.array(
+                image
+            )
+
+
+            # Send frame to your
+            # separate QR scanner
+
+            p_id = qr_code_scanner(
+                frame
+            )
+
+
+            # =================================================
+            # QR DETECTED
+            # =================================================
+
+            if p_id is not None:
+
+                # Only process the QR if it is
+                # different from the previous QR.
+
+                if (
+                    p_id
+                    !=
+                    st.session_state.last_detected_p_id
+                ):
+
+                    st.session_state.last_detected_p_id = (
+                        p_id
+                    )
+
+
+                    st.success(
+                        "✅ QR Code Scanned Successfully"
+                    )
+
+
+                    st.write(
+                        f"**Product ID:** {p_id}"
+                    )
+
+
+                    # -----------------------------------------
+                    # Product lookup
+                    # -----------------------------------------
+
+                    product = (
+                        data_retrieve_from_PRODUCT_DETAILS(
+                            p_id
+                        )
+                    )
+
+
+                    if product:
+
+                        st.session_state.product_details = (
+                            product
+                        )
+
+
+                        # No camera stop here.
+                        # Camera remains active.
+
+                    else:
+
+                        st.error(
+                            f"Product ID {p_id} "
+                            "was not found in "
+                            "PRODUCT_DETAILS."
+                        )
+
+
+        except Exception as e:
+
+            st.error(
+                f"Camera scanning error: {e}"
+            )
+
+
+    # ========================================================
+    # PRODUCT DETAILS
+    # ========================================================
+
+    if st.session_state.product_details:
+
+        product = (
+            st.session_state.product_details
+        )
+
+
+        st.divider()
+
+        st.subheader(
+            "📦 Scanned Product"
+        )
+
+
+        # ----------------------------------------------------
+        # PRODUCT INFORMATION
+        # ----------------------------------------------------
+
+        col1, col2, col3 = st.columns(3)
+
+
+        with col1:
+
+            st.write(
+                f"**Product ID:** "
+                f"{product[0]}"
+            )
+
+
+        with col2:
+
+            st.write(
+                f"**Product Name:** "
+                f"{product[1]}"
+            )
+
+
+        with col3:
+
+            st.write(
+                f"**Price:** "
+                f"₹ {float(product[2]):.2f}"
+            )
+
+
+        # ----------------------------------------------------
+        # QUANTITY
+        # ----------------------------------------------------
+
+        quantity = st.number_input(
+
+            "Enter Quantity",
+
+            min_value=1,
+
+            value=1,
+
+            step=1,
+
+            key=f"quantity_{product[0]}"
+        )
+
+
+        # ----------------------------------------------------
+        # AMOUNT
+        # ----------------------------------------------------
+
+        amount = (
+            float(product[2])
+            *
+            quantity
+        )
+
+
+        st.info(
+            f"Product Amount: "
+            f"₹ {amount:.2f}"
+        )
+
+
+        # ----------------------------------------------------
+        # ADD PRODUCT
+        # ----------------------------------------------------
+
+        if st.button(
+            "➕ Add Product to Bill",
+            type="primary"
+        ):
+
+            success, message = (
+                data_entry_BILL_DETAILS_TB(
+
+                    st.session_state.bill_id,
+
+                    customer[0],
+
+                    product[0],
+
+                    product[1],
+
+                    quantity
+                )
+            )
+
+
+            if success:
+
+                # --------------------------------------------
+                # Update total
+                # --------------------------------------------
+
+                st.session_state.total_bill += (
+                    amount
+                )
+
+
+                # --------------------------------------------
+                # Update bill summary
+                # --------------------------------------------
+
+                update_bill_total(
+
+                    st.session_state.bill_id,
+
+                    st.session_state.total_bill
+                )
+
+
+                # --------------------------------------------
+                # Add item to bill
+                # --------------------------------------------
+
+                st.session_state.bill_items.append(
+
+                    {
+                        "Product ID": product[0],
+
+                        "Product Name": product[1],
+
+                        "Price": float(
+                            product[2]
+                        ),
+
+                        "Quantity": quantity,
+
+                        "Amount": amount
+                    }
+                )
+
+
+                # --------------------------------------------
+                # Clear product
+                # --------------------------------------------
+
+                st.session_state.product_details = (
+                    None
+                )
+
+
+                # --------------------------------------------
+                # IMPORTANT
+                #
+                # We do NOT stop the camera.
+                #
+                # But we keep the previous ID until
+                # the QR is removed from the camera.
+                # --------------------------------------------
+
+                st.success(
+                    f"{product[1]} "
+                    "added successfully."
+                )
+
+
+            else:
+
+                st.error(message)
+
+
+    # ========================================================
+    # CURRENT BILL
+    # ========================================================
+
+    st.divider()
+
+    st.subheader(
+        "🧾 Current Bill"
+    )
+
+
+    if st.session_state.bill_items:
+
+        # ----------------------------------------------------
+        # Header
+        # ----------------------------------------------------
+
+        h1, h2, h3, h4, h5 = st.columns(5)
+
+
+        with h1:
+
+            st.write("**No.**")
+
+
+        with h2:
+
+            st.write("**Product ID**")
+
+
+        with h3:
+
+            st.write("**Product Name**")
+
+
+        with h4:
+
+            st.write("**Quantity / Price**")
+
+
+        with h5:
+
+            st.write("**Amount**")
+
+
+        st.divider()
+
+
+        # ----------------------------------------------------
+        # Items
+        # ----------------------------------------------------
+
+        for index, item in enumerate(
+            st.session_state.bill_items,
+            start=1
+        ):
+
+            c1, c2, c3, c4, c5 = (
+                st.columns(5)
+            )
+
+
+            with c1:
+
+                st.write(
+                    index
+                )
+
+
+            with c2:
+
+                st.write(
+                    item["Product ID"]
+                )
+
+
+            with c3:
+
+                st.write(
+                    item["Product Name"]
+                )
+
+
+            with c4:
+
+                st.write(
+                    f'{item["Quantity"]} × '
+                    f'₹ {item["Price"]:.2f}'
+                )
+
+
+            with c5:
+
+                st.write(
+                    f'₹ {item["Amount"]:.2f}'
+                )
+
+
+        st.divider()
+
+
+        st.subheader(
+            f"💰 Total Bill Amount: "
+            f"₹ {st.session_state.total_bill:.2f}"
+        )
+
+
+    else:
+
+        st.info(
+            "No products added to the bill yet."
+        )
+
+
+    # ========================================================
+    # RESET SCANNER
+    # ========================================================
+
+    st.divider()
+
+
     if st.button(
-        "🆕 START NEW BILL"
+        "🔄 Ready for Next QR"
     ):
 
-        st.session_state.customer = None
+        st.session_state.last_detected_p_id = (
+            None
+        )
+
+        st.session_state.product_details = (
+            None
+        )
+
+        st.rerun()
+
+
+    # ========================================================
+    # FINISH BILLING
+    # ========================================================
+
+    st.divider()
+
+
+    if st.button(
+        "✅ Finish Billing",
+        type="primary"
+    ):
+
+        # ----------------------------------------------------
+        # Final total update
+        # ----------------------------------------------------
+
+        update_bill_total(
+
+            st.session_state.bill_id,
+
+            st.session_state.total_bill
+        )
+
+
+        # ----------------------------------------------------
+        # Store values before clearing
+        # ----------------------------------------------------
+
+        completed_bill_id = (
+            st.session_state.bill_id
+        )
+
+        completed_customer_name = (
+            customer[1]
+        )
+
+        completed_total = (
+            st.session_state.total_bill
+        )
+
+
+        # ----------------------------------------------------
+        # Reset
+        # ----------------------------------------------------
 
         st.session_state.billing_started = False
 
+        st.session_state.bill_id = None
+
+        st.session_state.total_bill = 0.0
+
         st.session_state.bill_items = []
 
-        st.session_state.total_bill_amount = 0.0
+        st.session_state.product_details = None
 
-        st.session_state.billing_finished = False
+        st.session_state.last_detected_p_id = None
 
-        st.session_state.show_registration = False
+        st.session_state.customer = None
 
-        st.session_state.scanned_product = None
+        st.session_state.camera_active = False
+
+
+        # ----------------------------------------------------
+        # Completion message
+        # ----------------------------------------------------
+
+        st.success(
+            f"""
+✅ BILLING COMPLETED SUCCESSFULLY
+
+Bill ID: {completed_bill_id}
+
+Customer: {completed_customer_name}
+
+Total Amount:
+₹ {completed_total:.2f}
+"""
+        )
+
 
         st.rerun()
